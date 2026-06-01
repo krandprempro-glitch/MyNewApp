@@ -36,11 +36,17 @@ public class MainActivity extends Activity {
     private String currentDirectory = "/";
     private StringBuilder currentCommand = new StringBuilder();
     private boolean isRoot = false;
+    private boolean isUbuntu = false;
     private boolean waitingForCommand = true;
+    private Process ubuntuProcess;
+    private DataOutputStream ubuntuOutputStream;
+    private BufferedReader ubuntuReader;
     
     private static final int COLOR_WHITE = Color.parseColor("#FFFFFF");
     private static final int COLOR_GREEN = Color.parseColor("#00FF00");
     private static final int COLOR_RED = Color.parseColor("#FF0000");
+    private static final int COLOR_CYAN = Color.parseColor("#00FFFF");
+    private static final int COLOR_YELLOW = Color.parseColor("#FFFF00");
     
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -84,7 +90,6 @@ public class MainActivity extends Activity {
                     }
                     return true;
                 } else {
-                    // تحويل keyCode إلى حرف
                     int unicode = event.getUnicodeChar();
                     if (unicode != 0 && waitingForCommand) {
                         currentCommand.append((char) unicode);
@@ -112,7 +117,7 @@ public class MainActivity extends Activity {
         setContentView(mainLayout);
         
         // عرض المؤشر
-        appendToTerminal(isRoot ? "# " : "$ ");
+        updatePrompt();
         
         // فتح لوحة المفاتيح
         openKeyboard();
@@ -121,11 +126,32 @@ public class MainActivity extends Activity {
         startShell();
     }
     
+    private void updatePrompt() {
+        if (isUbuntu) {
+            appendToTerminal("root@localhost:~# ");
+        } else if (isRoot) {
+            appendToTerminal("# ");
+        } else {
+            appendToTerminal("$ ");
+        }
+    }
+    
+    private String getPromptString() {
+        if (isUbuntu) {
+            return "root@localhost:~# ";
+        } else if (isRoot) {
+            return "# ";
+        } else {
+            return "$ ";
+        }
+    }
+    
     private void updateTerminalLine() {
         String text = terminalOutput.getText().toString();
-        int lastIndex = text.lastIndexOf(isRoot ? "# " : "$ ");
+        String prompt = getPromptString();
+        int lastIndex = text.lastIndexOf(prompt);
         if (lastIndex >= 0) {
-            String newText = text.substring(0, lastIndex + 2) + currentCommand.toString();
+            String newText = text.substring(0, lastIndex + prompt.length()) + currentCommand.toString();
             terminalOutput.setText(newText);
             scrollView.post(() -> scrollView.fullScroll(View.FOCUS_DOWN));
         }
@@ -154,7 +180,7 @@ public class MainActivity extends Activity {
                             }
                             appendToTerminal(output + "\n");
                             waitingForCommand = true;
-                            appendToTerminal(isRoot ? "# " : "$ ");
+                            appendToTerminal(getPromptString());
                             currentCommand.setLength(0);
                             openKeyboard();
                         });
@@ -162,13 +188,13 @@ public class MainActivity extends Activity {
                 } catch (Exception e) {
                     mainHandler.post(() -> {
                         appendToTerminal("Shell error\n");
-                        appendToTerminal(isRoot ? "# " : "$ ");
+                        appendToTerminal(getPromptString());
                     });
                 }
             });
         } catch (Exception e) {
             appendToTerminal("Cannot start shell\n");
-            appendToTerminal(isRoot ? "# " : "$ ");
+            appendToTerminal(getPromptString());
         }
     }
     
@@ -176,14 +202,18 @@ public class MainActivity extends Activity {
         String command = currentCommand.toString().trim();
         if (command.isEmpty()) {
             currentCommand.setLength(0);
-            appendToTerminal("\n" + (isRoot ? "# " : "$ "));
+            appendToTerminal("\n" + getPromptString());
             return;
         }
         
         // حذف المؤقت من السطر الحالي
         String text = terminalOutput.getText().toString();
-        String newText = text.substring(0, text.length() - 2) + command + "\n";
-        terminalOutput.setText(newText);
+        String prompt = getPromptString();
+        int lastIndex = text.lastIndexOf(prompt);
+        if (lastIndex >= 0) {
+            String newText = text.substring(0, lastIndex + prompt.length()) + command + "\n";
+            terminalOutput.setText(newText);
+        }
         
         waitingForCommand = false;
         
@@ -202,14 +232,26 @@ public class MainActivity extends Activity {
             appendToTerminal(command.substring(5) + "\n");
         } else if (command.equals("su")) {
             executeSu();
+        } else if (command.equals("ubuntu") || command.equals("chroot-distro login ubuntu")) {
+            executeUbuntu();
         } else if (command.equals("exit")) {
-            if (isRoot) {
+            if (isUbuntu) {
+                exitUbuntu();
+            } else if (isRoot) {
                 isRoot = false;
                 appendToTerminal("Exit root\n");
             } else {
                 appendToTerminal("Goodbye!\n");
                 finish();
                 return;
+            }
+        } else if (isUbuntu && ubuntuOutputStream != null) {
+            try {
+                ubuntuOutputStream.writeBytes(command + "\n");
+                ubuntuOutputStream.flush();
+                Thread.sleep(100);
+            } catch (Exception e) {
+                appendToTerminal("Error\n");
             }
         } else if (shellOutputStream != null) {
             try {
@@ -225,12 +267,98 @@ public class MainActivity extends Activity {
         
         currentCommand.setLength(0);
         waitingForCommand = true;
-        appendToTerminal(isRoot ? "# " : "$ ");
+        appendToTerminal(getPromptString());
         openKeyboard();
     }
     
+    private void executeUbuntu() {
+        appendToTerminal("\n╔═══════════════════════════════════════════╗\n");
+        appendToTerminal("║         Starting Ubuntu Chroot            ║\n");
+        appendToTerminal("╠═══════════════════════════════════════════╣\n");
+        appendToTerminal("║  Loading Ubuntu environment...            ║\n");
+        appendToTerminal("║  Please wait, this may take a moment      ║\n");
+        appendToTerminal("╚═══════════════════════════════════════════╝\n\n");
+        
+        try {
+            // إظهار التحميل
+            for (int i = 0; i <= 100; i += 10) {
+                final int progress = i;
+                Thread.sleep(50);
+                mainHandler.post(() -> {
+                    appendToTerminal("\rLoading: [" + getProgressBar(progress) + "] " + progress + "%");
+                });
+            }
+            
+            mainHandler.post(() -> appendToTerminal("\n\n✓ Ubuntu environment ready!\n\n"));
+            
+            // تشغيل Ubuntu
+            ProcessBuilder pb = new ProcessBuilder("sh", "-c", "chroot-distro login ubuntu");
+            pb.redirectErrorStream(true);
+            ubuntuProcess = pb.start();
+            ubuntuOutputStream = new DataOutputStream(ubuntuProcess.getOutputStream());
+            ubuntuReader = new BufferedReader(new InputStreamReader(ubuntuProcess.getInputStream()));
+            
+            isUbuntu = true;
+            isRoot = true;
+            
+            // قراءة مخرجات Ubuntu
+            executor.execute(() -> {
+                try {
+                    String line;
+                    while ((line = ubuntuReader.readLine()) != null) {
+                        final String output = line;
+                        mainHandler.post(() -> {
+                            appendToTerminal(output + "\n");
+                        });
+                    }
+                } catch (Exception e) {
+                    mainHandler.post(() -> {
+                        appendToTerminal("Ubuntu session ended\n");
+                    });
+                }
+            });
+            
+            appendToTerminal("root@localhost:~# ");
+            
+        } catch (Exception e) {
+            appendToTerminal("✗ Failed to start Ubuntu: " + e.getMessage() + "\n");
+            appendToTerminal(getPromptString());
+        }
+    }
+    
+    private String getProgressBar(int progress) {
+        StringBuilder bar = new StringBuilder();
+        int filled = progress / 5;
+        for (int i = 0; i < 20; i++) {
+            if (i < filled) {
+                bar.append("█");
+            } else {
+                bar.append("░");
+            }
+        }
+        return bar.toString();
+    }
+    
+    private void exitUbuntu() {
+        try {
+            if (ubuntuOutputStream != null) {
+                ubuntuOutputStream.writeBytes("exit\n");
+                ubuntuOutputStream.flush();
+                Thread.sleep(500);
+                ubuntuOutputStream.close();
+            }
+            if (ubuntuReader != null) ubuntuReader.close();
+            if (ubuntuProcess != null) ubuntuProcess.destroy();
+        } catch (Exception e) {}
+        
+        isUbuntu = false;
+        isRoot = false;
+        appendToTerminal("\n✓ Exited Ubuntu environment\n");
+        appendToTerminal(getPromptString());
+    }
+    
     private void executeSu() {
-        if (!isRoot) {
+        if (!isRoot && !isUbuntu) {
             appendToTerminal("Requesting root access...\n");
             try {
                 Process suProcess = Runtime.getRuntime().exec(new String[]{"su"});
@@ -262,7 +390,7 @@ public class MainActivity extends Activity {
                                     }
                                     appendToTerminal(output + "\n");
                                     waitingForCommand = true;
-                                    appendToTerminal(isRoot ? "# " : "$ ");
+                                    appendToTerminal(getPromptString());
                                     currentCommand.setLength(0);
                                 });
                             }
@@ -314,16 +442,19 @@ public class MainActivity extends Activity {
     }
     
     private void showHelp() {
-        appendToTerminal("\n=== Available Commands ===\n");
-        appendToTerminal("  help  - Show this help\n");
-        appendToTerminal("  clear - Clear screen\n");
-        appendToTerminal("  ls    - List files\n");
-        appendToTerminal("  cd    - Change directory\n");
-        appendToTerminal("  pwd   - Show current path\n");
-        appendToTerminal("  echo  - Print text\n");
-        appendToTerminal("  su    - Switch to root\n");
-        appendToTerminal("  exit  - Close app\n");
-        appendToTerminal("==========================\n");
+        appendToTerminal("\n╔═══════════════════════════════════════════╗\n");
+        appendToTerminal("║     Advanced Terminal Emulator            ║\n");
+        appendToTerminal("╠═══════════════════════════════════════════╣\n");
+        appendToTerminal("║  help  - Show this help                   ║\n");
+        appendToTerminal("║  clear - Clear screen                     ║\n");
+        appendToTerminal("║  ls    - List files                       ║\n");
+        appendToTerminal("║  cd    - Change directory                 ║\n");
+        appendToTerminal("║  pwd   - Show current path                ║\n");
+        appendToTerminal("║  echo  - Print text                       ║\n");
+        appendToTerminal("║  su    - Switch to root                   ║\n");
+        appendToTerminal("║  ubuntu - Start Ubuntu chroot             ║\n");
+        appendToTerminal("║  exit  - Exit current session             ║\n");
+        appendToTerminal("╚═══════════════════════════════════════════╝\n");
     }
     
     private void clearTerminal() {
@@ -341,6 +472,9 @@ public class MainActivity extends Activity {
     protected void onDestroy() {
         super.onDestroy();
         try {
+            if (ubuntuOutputStream != null) ubuntuOutputStream.close();
+            if (ubuntuReader != null) ubuntuReader.close();
+            if (ubuntuProcess != null) ubuntuProcess.destroy();
             if (shellOutputStream != null) shellOutputStream.close();
             if (shellReader != null) shellReader.close();
             if (shellProcess != null) shellProcess.destroy();
