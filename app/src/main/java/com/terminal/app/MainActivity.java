@@ -4,6 +4,8 @@ import android.app.Activity;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
+import android.text.ClipboardManager;
+import android.text.TextUtils;
 import android.text.method.ScrollingMovementMethod;
 import android.view.KeyEvent;
 import android.view.MotionEvent;
@@ -12,6 +14,7 @@ import android.view.inputmethod.InputMethodManager;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
+import android.widget.Toast;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.content.Context;
@@ -41,6 +44,7 @@ public class MainActivity extends Activity {
     private Process ubuntuProcess;
     private DataOutputStream ubuntuOutputStream;
     private BufferedReader ubuntuReader;
+    private ClipboardManager clipboard;
     
     private static final int COLOR_WHITE = Color.parseColor("#FFFFFF");
     private static final int COLOR_GREEN = Color.parseColor("#00FF00");
@@ -54,6 +58,7 @@ public class MainActivity extends Activity {
         
         executor = Executors.newSingleThreadExecutor();
         mainHandler = new Handler(Looper.getMainLooper());
+        clipboard = (ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
         
         // الواجهة الرئيسية
         mainLayout = new LinearLayout(this);
@@ -77,6 +82,12 @@ public class MainActivity extends Activity {
         terminalOutput.setFocusable(true);
         terminalOutput.setFocusableInTouchMode(true);
         
+        // الضغط المطول للصق
+        terminalOutput.setOnLongClickListener(v -> {
+            pasteFromClipboard();
+            return true;
+        });
+        
         // معالجة الكتابة
         terminalOutput.setOnKeyListener((v, keyCode, event) -> {
             if (event.getAction() == KeyEvent.ACTION_DOWN) {
@@ -88,6 +99,9 @@ public class MainActivity extends Activity {
                         currentCommand.deleteCharAt(currentCommand.length() - 1);
                         updateTerminalLine();
                     }
+                    return true;
+                } else if (keyCode == KeyEvent.KEYCODE_V && event.isCtrlPressed()) {
+                    pasteFromClipboard();
                     return true;
                 } else {
                     int unicode = event.getUnicodeChar();
@@ -124,6 +138,25 @@ public class MainActivity extends Activity {
         
         // بدء Shell
         startShell();
+    }
+    
+    private void pasteFromClipboard() {
+        if (clipboard.hasPrimaryClip()) {
+            String pastedText = clipboard.getPrimaryClip().getItemAt(0).getText().toString();
+            if (pastedText != null && !pastedText.isEmpty()) {
+                // إزالة الأسطر الجديدة واستبدالها بمسافات
+                pastedText = pastedText.replace("\n", " ").replace("\r", "");
+                currentCommand.append(pastedText);
+                updateTerminalLine();
+                Toast.makeText(this, "Pasted: " + pastedText, Toast.LENGTH_SHORT).show();
+            }
+        }
+    }
+    
+    private void copyToClipboard(String text) {
+        android.content.ClipData clip = android.content.ClipData.newPlainText("Terminal", text);
+        clipboard.setPrimaryClip(clip);
+        Toast.makeText(this, "Copied to clipboard", Toast.LENGTH_SHORT).show();
     }
     
     private void updatePrompt() {
@@ -445,15 +478,20 @@ public class MainActivity extends Activity {
         appendToTerminal("\n╔═══════════════════════════════════════════╗\n");
         appendToTerminal("║     Advanced Terminal Emulator            ║\n");
         appendToTerminal("╠═══════════════════════════════════════════╣\n");
-        appendToTerminal("║  help  - Show this help                   ║\n");
-        appendToTerminal("║  clear - Clear screen                     ║\n");
-        appendToTerminal("║  ls    - List files                       ║\n");
-        appendToTerminal("║  cd    - Change directory                 ║\n");
-        appendToTerminal("║  pwd   - Show current path                ║\n");
-        appendToTerminal("║  echo  - Print text                       ║\n");
-        appendToTerminal("║  su    - Switch to root                   ║\n");
-        appendToTerminal("║  ubuntu - Start Ubuntu chroot             ║\n");
-        appendToTerminal("║  exit  - Exit current session             ║\n");
+        appendToTerminal("║  help      - Show this help               ║\n");
+        appendToTerminal("║  clear     - Clear screen                 ║\n");
+        appendToTerminal("║  ls        - List files                   ║\n");
+        appendToTerminal("║  cd        - Change directory             ║\n");
+        appendToTerminal("║  pwd       - Show current path            ║\n");
+        appendToTerminal("║  echo      - Print text                   ║\n");
+        appendToTerminal("║  su        - Switch to root               ║\n");
+        appendToTerminal("║  ubuntu    - Start Ubuntu chroot          ║\n");
+        appendToTerminal("║  exit      - Exit current session         ║\n");
+        appendToTerminal("╠═══════════════════════════════════════════╣\n");
+        appendToTerminal("║  Clipboard Shortcuts:                     ║\n");
+        appendToTerminal("║  • Long press on screen → Paste           ║\n");
+        appendToTerminal("║  • Ctrl + V → Paste                       ║\n");
+        appendToTerminal("║  • Select text → Copy                     ║\n");
         appendToTerminal("╚═══════════════════════════════════════════╝\n");
     }
     
