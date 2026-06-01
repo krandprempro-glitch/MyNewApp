@@ -222,6 +222,20 @@ public class MainActivity extends Activity {
     
     private void executeLs() {
         try {
+            Process process = Runtime.getRuntime().exec(new String[]{"sh", "-c", "ls -la " + currentDirectory});
+            BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()));
+            String line;
+            while ((line = reader.readLine()) != null) {
+                appendToTerminal(line + "\n");
+            }
+            process.waitFor();
+        } catch (Exception e) {
+            appendToTerminal("Error: " + e.getMessage() + "\n");
+        }
+    }
+    
+    private void executeLsOld() {
+        try {
             File dir = new File(currentDirectory);
             File[] files = dir.listFiles();
             if (files != null) {
