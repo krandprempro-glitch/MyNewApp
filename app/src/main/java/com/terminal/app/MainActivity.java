@@ -6,6 +6,7 @@ import android.os.Handler;
 import android.os.Looper;
 import android.text.method.ScrollingMovementMethod;
 import android.view.KeyEvent;
+import android.view.MotionEvent;
 import android.view.View;
 import android.view.inputmethod.EditorInfo;
 import android.view.inputmethod.InputMethodManager;
@@ -29,19 +30,18 @@ public class MainActivity extends Activity {
     private TextView terminalOutput;
     private EditText commandInput;
     private ScrollView scrollView;
+    private LinearLayout mainLayout;
     private ExecutorService executor;
     private Handler mainHandler;
     private Process shellProcess;
     private DataOutputStream shellOutputStream;
     private BufferedReader shellReader;
     private String currentDirectory = "/";
-    private StringBuilder currentHistory = new StringBuilder();
     private boolean isRoot = false;
     
     private static final int COLOR_WHITE = Color.parseColor("#FFFFFF");
     private static final int COLOR_GREEN = Color.parseColor("#00FF00");
     private static final int COLOR_RED = Color.parseColor("#FF0000");
-    private static final int COLOR_YELLOW = Color.parseColor("#FFFF00");
     
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -50,13 +50,13 @@ public class MainActivity extends Activity {
         executor = Executors.newSingleThreadExecutor();
         mainHandler = new Handler(Looper.getMainLooper());
         
-        // إنشاء الواجهة الرئيسية
-        LinearLayout mainLayout = new LinearLayout(this);
+        // الواجهة الرئيسية
+        mainLayout = new LinearLayout(this);
         mainLayout.setOrientation(LinearLayout.VERTICAL);
         mainLayout.setBackgroundColor(Color.BLACK);
         mainLayout.setPadding(15, 30, 15, 15);
         
-        // منطقة عرض المخرجات
+        // منطقة عرض المخرجات (قابلة للتمرير)
         scrollView = new ScrollView(this);
         scrollView.setBackgroundColor(Color.BLACK);
         scrollView.setVerticalScrollBarEnabled(true);
@@ -77,7 +77,8 @@ public class MainActivity extends Activity {
         inputLayout.setPadding(5, 10, 5, 10);
         
         TextView prompt = new TextView(this);
-        updatePrompt(prompt);
+        prompt.setText("$ ");
+        prompt.setTextColor(COLOR_GREEN);
         prompt.setTextSize(14);
         prompt.setTypeface(Typeface.MONOSPACE);
         
@@ -90,6 +91,7 @@ public class MainActivity extends Activity {
         commandInput.setSingleLine(true);
         commandInput.setFocusable(true);
         commandInput.setFocusableInTouchMode(true);
+        commandInput.setCursorVisible(true);
         
         commandInput.setOnEditorActionListener((v, actionId, event) -> {
             if (actionId == EditorInfo.IME_ACTION_DONE || 
@@ -115,24 +117,23 @@ public class MainActivity extends Activity {
         // عرض المؤشر
         appendToTerminal("$ ");
         
-        // فتح لوحة المفاتيح تلقائياً
-        showKeyboard();
+        // عند الضغط على أي مكان في الشاشة، تفتح لوحة المفاتيح
+        mainLayout.setOnTouchListener((v, event) -> {
+            if (event.getAction() == MotionEvent.ACTION_DOWN) {
+                openKeyboard();
+                return true;
+            }
+            return false;
+        });
+        
+        // فتح لوحة المفاتيح عند بدء التشغيل
+        openKeyboard();
         
         // بدء Shell
         startShell();
     }
     
-    private void updatePrompt(TextView prompt) {
-        if (isRoot) {
-            prompt.setText("# ");
-            prompt.setTextColor(COLOR_RED);
-        } else {
-            prompt.setText("$ ");
-            prompt.setTextColor(COLOR_GREEN);
-        }
-    }
-    
-    private void showKeyboard() {
+    private void openKeyboard() {
         commandInput.requestFocus();
         InputMethodManager imm = (InputMethodManager) getSystemService(Context.INPUT_METHOD_SERVICE);
         imm.showSoftInput(commandInput, InputMethodManager.SHOW_IMPLICIT);
@@ -155,12 +156,12 @@ public class MainActivity extends Activity {
                     }
                 } catch (Exception e) {
                     mainHandler.post(() -> {
-                        appendToTerminal("Shell error: " + e.getMessage() + "\n");
+                        appendToTerminal("Shell error\n");
                     });
                 }
             });
         } catch (Exception e) {
-            appendToTerminal("Cannot start system shell.\n");
+            appendToTerminal("Cannot start shell\n");
         }
     }
     
@@ -174,11 +175,9 @@ public class MainActivity extends Activity {
         // عرض الأمر
         appendToTerminal(command + "\n");
         
-        // حفظ في التاريخ
-        currentHistory.append(command).append("\n");
         commandInput.setText("");
         
-        // معالجة الأوامر المدمجة
+        // معالجة الأوامر
         if (command.equals("clear")) {
             clearTerminal();
         } else if (command.equals("help")) {
@@ -187,10 +186,6 @@ public class MainActivity extends Activity {
             executeLs();
         } else if (command.equals("pwd")) {
             appendToTerminal(currentDirectory + "\n");
-        } else if (command.equals("su")) {
-            executeSu(prompt);
-        } else if (command.startsWith("chroot-distro")) {
-            executeChrootDistro(command);
         } else if (command.startsWith("cd ")) {
             changeDirectory(command.substring(3));
         } else if (command.startsWith("echo ")) {
@@ -201,10 +196,10 @@ public class MainActivity extends Activity {
                 shellOutputStream.flush();
                 Thread.sleep(100);
             } catch (Exception e) {
-                appendToTerminal("Error executing command\n");
+                appendToTerminal("Error\n");
             }
         } else {
-            appendToTerminal("Command not found: " + command + "\n");
+            appendToTerminal("Command not found\n");
         }
         
         // تحديث المؤشر
@@ -212,84 +207,16 @@ public class MainActivity extends Activity {
         appendToTerminal(isRoot ? "# " : "$ ");
         
         // إعادة فتح لوحة المفاتيح
-        showKeyboard();
+        openKeyboard();
     }
     
-    private void executeSu(TextView prompt) {
-        if (!isRoot) {
-            appendToTerminal("Requesting root access...\n");
-            try {
-                Process suProcess = Runtime.getRuntime().exec(new String[]{"su"});
-                DataOutputStream suOut = new DataOutputStream(suProcess.getOutputStream());
-                BufferedReader suReader = new BufferedReader(new InputStreamReader(suProcess.getInputStream()));
-                
-                suOut.writeBytes("id\n");
-                suOut.flush();
-                
-                String line = suReader.readLine();
-                if (line != null && line.contains("uid=0")) {
-                    isRoot = true;
-                    appendToTerminal("✓ Root access granted!\n");
-                    // إعادة تشغيل Shell مع صلاحيات root
-                    if (shellProcess != null) {
-                        shellProcess.destroy();
-                    }
-                    shellProcess = Runtime.getRuntime().exec(new String[]{"su"});
-                    shellOutputStream = new DataOutputStream(shellProcess.getOutputStream());
-                    shellReader = new BufferedReader(new InputStreamReader(shellProcess.getInputStream()));
-                    
-                    // قراءة المخرجات
-                    executor.execute(() -> {
-                        try {
-                            String line2;
-                            while ((line2 = shellReader.readLine()) != null) {
-                                final String output = line2;
-                                mainHandler.post(() -> appendToTerminal(output + "\n"));
-                            }
-                        } catch (Exception e) {}
-                    });
-                } else {
-                    appendToTerminal("✗ Root access denied!\n");
-                }
-                suProcess.destroy();
-            } catch (Exception e) {
-                appendToTerminal("✗ Root access failed: " + e.getMessage() + "\n");
-            }
+    private void updatePrompt(TextView prompt) {
+        if (isRoot) {
+            prompt.setText("# ");
+            prompt.setTextColor(COLOR_RED);
         } else {
-            appendToTerminal("Already have root access!\n");
-        }
-        updatePrompt(prompt);
-    }
-    
-    private void executeChrootDistro(String command) {
-        appendToTerminal("Starting Ubuntu chroot environment...\n");
-        appendToTerminal("This may take a moment...\n\n");
-        
-        try {
-            String[] cmd;
-            if (isRoot) {
-                cmd = new String[]{"su", "-c", command};
-            } else {
-                cmd = new String[]{"sh", "-c", command};
-            }
-            
-            Process process = Runtime.getRuntime().exec(cmd);
-            BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()));
-            BufferedReader errorReader = new BufferedReader(new InputStreamReader(process.getErrorStream()));
-            
-            String line;
-            while ((line = reader.readLine()) != null) {
-                appendToTerminal(line + "\n");
-            }
-            while ((line = errorReader.readLine()) != null) {
-                appendToTerminal(line + "\n");
-            }
-            
-            process.waitFor();
-            appendToTerminal("\n✓ Ubuntu session ended\n");
-        } catch (Exception e) {
-            appendToTerminal("Error: " + e.getMessage() + "\n");
-            appendToTerminal("Make sure chroot-distro is installed and Ubuntu is set up.\n");
+            prompt.setText("$ ");
+            prompt.setTextColor(COLOR_GREEN);
         }
     }
     
@@ -311,7 +238,7 @@ public class MainActivity extends Activity {
                 appendToTerminal("Cannot read directory\n");
             }
         } catch (Exception e) {
-            appendToTerminal("Error: " + e.getMessage() + "\n");
+            appendToTerminal("Error\n");
         }
     }
     
@@ -336,15 +263,12 @@ public class MainActivity extends Activity {
     
     private void showHelp() {
         appendToTerminal("\n=== Available Commands ===\n");
-        appendToTerminal("  help           - Show this help\n");
-        appendToTerminal("  clear          - Clear screen\n");
-        appendToTerminal("  ls             - List files\n");
-        appendToTerminal("  cd <path>      - Change directory\n");
-        appendToTerminal("  pwd            - Show current path\n");
-        appendToTerminal("  su             - Switch to root (requires root)\n");
-        appendToTerminal("  chroot-distro login ubuntu - Start Ubuntu\n");
-        appendToTerminal("  echo <text>    - Print text\n");
-        appendToTerminal("  exit           - Close app\n");
+        appendToTerminal("  help  - Show this help\n");
+        appendToTerminal("  clear - Clear screen\n");
+        appendToTerminal("  ls    - List files\n");
+        appendToTerminal("  cd    - Change directory\n");
+        appendToTerminal("  pwd   - Show current path\n");
+        appendToTerminal("  echo  - Print text\n");
         appendToTerminal("==========================\n");
     }
     
