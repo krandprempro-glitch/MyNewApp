@@ -4,9 +4,7 @@ import android.app.Activity;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
-import android.text.SpannableStringBuilder;
 import android.text.method.ScrollingMovementMethod;
-import android.text.style.ForegroundColorSpan;
 import android.view.KeyEvent;
 import android.view.View;
 import android.view.inputmethod.EditorInfo;
@@ -34,16 +32,14 @@ public class MainActivity extends Activity {
     private Process shellProcess;
     private DataOutputStream shellOutputStream;
     private BufferedReader shellReader;
-    private String currentDirectory = "/data/data/com.termux/files/home";
+    private String currentDirectory = "/";
     private StringBuilder currentHistory = new StringBuilder();
-    private TextView statusBar;
     
     // الألوان
-    private static final int COLOR_GREEN = Color.parseColor("#00FF00");
     private static final int COLOR_WHITE = Color.parseColor("#FFFFFF");
-    private static final int COLOR_YELLOW = Color.parseColor("#FFFF00");
+    private static final int COLOR_GREEN = Color.parseColor("#00FF00");
     private static final int COLOR_RED = Color.parseColor("#FF0000");
-    private static final int COLOR_CYAN = Color.parseColor("#00FFFF");
+    private static final int COLOR_YELLOW = Color.parseColor("#FFFF00");
     
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -56,16 +52,7 @@ public class MainActivity extends Activity {
         LinearLayout mainLayout = new LinearLayout(this);
         mainLayout.setOrientation(LinearLayout.VERTICAL);
         mainLayout.setBackgroundColor(Color.BLACK);
-        mainLayout.setPadding(20, 30, 20, 20);
-        
-        // شريط الحالة
-        statusBar = new TextView(this);
-        statusBar.setText(" ⚡ Advanced Terminal v2.0 | " + currentDirectory);
-        statusBar.setTextColor(COLOR_CYAN);
-        statusBar.setBackgroundColor(Color.parseColor("#1A1A1A"));
-        statusBar.setPadding(10, 15, 10, 15);
-        statusBar.setTypeface(Typeface.MONOSPACE);
-        statusBar.setTextSize(12);
+        mainLayout.setPadding(15, 30, 15, 15);
         
         // منطقة عرض المخرجات
         scrollView = new ScrollView(this);
@@ -73,7 +60,7 @@ public class MainActivity extends Activity {
         scrollView.setVerticalScrollBarEnabled(true);
         
         terminalOutput = new TextView(this);
-        terminalOutput.setTextColor(COLOR_GREEN);
+        terminalOutput.setTextColor(COLOR_WHITE);
         terminalOutput.setTextSize(14);
         terminalOutput.setTypeface(Typeface.MONOSPACE);
         terminalOutput.setMovementMethod(new ScrollingMovementMethod());
@@ -84,11 +71,11 @@ public class MainActivity extends Activity {
         // سطر الإدخال
         LinearLayout inputLayout = new LinearLayout(this);
         inputLayout.setOrientation(LinearLayout.HORIZONTAL);
-        inputLayout.setBackgroundColor(Color.parseColor("#1A1A1A"));
-        inputLayout.setPadding(10, 15, 10, 15);
+        inputLayout.setBackgroundColor(Color.BLACK);
+        inputLayout.setPadding(5, 10, 5, 10);
         
         TextView prompt = new TextView(this);
-        prompt.setText("➜ ");
+        prompt.setText("$ - ");
         prompt.setTextColor(COLOR_GREEN);
         prompt.setTextSize(14);
         prompt.setTypeface(Typeface.MONOSPACE);
@@ -98,8 +85,7 @@ public class MainActivity extends Activity {
         commandInput.setTextColor(COLOR_WHITE);
         commandInput.setTextSize(14);
         commandInput.setTypeface(Typeface.MONOSPACE);
-        commandInput.setHint("اكتب الأمر هنا...");
-        commandInput.setHintTextColor(Color.parseColor("#666666"));
+        commandInput.setHint("");
         commandInput.setSingleLine(true);
         
         commandInput.setOnEditorActionListener((v, actionId, event) -> {
@@ -115,7 +101,6 @@ public class MainActivity extends Activity {
         inputLayout.addView(prompt);
         inputLayout.addView(commandInput, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1));
         
-        mainLayout.addView(statusBar);
         mainLayout.addView(scrollView, new LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.MATCH_PARENT, 0, 1));
         mainLayout.addView(inputLayout);
@@ -124,22 +109,11 @@ public class MainActivity extends Activity {
         
         setContentView(mainLayout);
         
-        // عرض رسالة الترحيب
-        showWelcomeMessage();
-        
         // بدء Shell
         startShell();
-    }
-    
-    private void showWelcomeMessage() {
-        appendColoredText("╔═══════════════════════════════════════════╗\n", COLOR_CYAN);
-        appendColoredText("║     Advanced Terminal Emulator v2.0       ║\n", COLOR_YELLOW);
-        appendColoredText("╠═══════════════════════════════════════════╣\n", COLOR_CYAN);
-        appendColoredText("║  الأوامر المتاحة:                         ║\n", COLOR_GREEN);
-        appendColoredText("║  • help, clear, ls, cd, pwd               ║\n", COLOR_WHITE);
-        appendColoredText("║  • mkdir, remove, cat, echo               ║\n", COLOR_WHITE);
-        appendColoredText("║  • exit, history                          ║\n", COLOR_WHITE);
-        appendColoredText("╚═══════════════════════════════════════════╝\n\n", COLOR_CYAN);
+        
+        // عرض المؤشر فقط
+        appendToTerminal("$ - ");
     }
     
     private void startShell() {
@@ -153,14 +127,14 @@ public class MainActivity extends Activity {
                     String line;
                     while ((line = shellReader.readLine()) != null) {
                         final String output = line;
-                        mainHandler.post(() -> appendColoredText(output + "\n", COLOR_WHITE));
+                        mainHandler.post(() -> appendToTerminal(output + "\n"));
                     }
                 } catch (Exception e) {
-                    mainHandler.post(() -> appendColoredText("Shell error: " + e.getMessage() + "\n", COLOR_RED));
+                    mainHandler.post(() -> appendToTerminal("Shell error: " + e.getMessage() + "\n"));
                 }
             });
         } catch (Exception e) {
-            appendColoredText("⚠️  Cannot start system shell. Using built-in commands only.\n", COLOR_YELLOW);
+            appendToTerminal("Cannot start system shell.\n");
         }
     }
     
@@ -168,13 +142,15 @@ public class MainActivity extends Activity {
         String command = commandInput.getText().toString().trim();
         if (command.isEmpty()) {
             commandInput.setText("");
+            appendToTerminal("$ - ");
             return;
         }
         
         // حفظ في التاريخ
         currentHistory.append(command).append("\n");
         
-        appendColoredText("➜ " + command + "\n", COLOR_GREEN);
+        // عرض الأمر الذي تم إدخاله
+        appendToTerminal(command + "\n");
         commandInput.setText("");
         
         // معالجة الأوامر المدمجة
@@ -185,42 +161,43 @@ public class MainActivity extends Activity {
         } else if (command.equals("ls")) {
             executeLs();
         } else if (command.equals("pwd")) {
-            appendColoredText(currentDirectory + "\n", COLOR_CYAN);
+            appendToTerminal(currentDirectory + "\n");
         } else if (command.equals("history")) {
-            appendColoredText("\n=== تاريخ الأوامر ===\n" + currentHistory.toString() + "\n", COLOR_YELLOW);
+            appendToTerminal(currentHistory.toString());
         } else if (command.equals("exit")) {
-            appendColoredText("Goodbye!\n", COLOR_YELLOW);
+            appendToTerminal("Goodbye!\n");
             finish();
         } else if (command.startsWith("cd ")) {
             changeDirectory(command.substring(3));
         } else if (command.startsWith("echo ")) {
-            String msg = command.substring(5);
-            appendColoredText(msg + "\n", COLOR_WHITE);
+            appendToTerminal(command.substring(5) + "\n");
         } else if (command.startsWith("mkdir ")) {
             createDirectory(command.substring(6));
-        } else if (command.startsWith("remove ")) {
-            removeFile(command.substring(7));
+        } else if (command.startsWith("rm ")) {
+            removeFile(command.substring(3));
         } else if (command.startsWith("cat ")) {
             readFile(command.substring(4));
         } else if (command.equals("whoami")) {
-            appendColoredText("user@android\n", COLOR_CYAN);
+            appendToTerminal("user@android\n");
         } else if (command.equals("date")) {
-            appendColoredText(java.time.LocalDateTime.now().toString() + "\n", COLOR_CYAN);
+            appendToTerminal(java.time.LocalDateTime.now().toString() + "\n");
         } else if (command.startsWith("touch ")) {
             createFile(command.substring(6));
         } else if (shellOutputStream != null) {
             try {
                 shellOutputStream.writeBytes(command + "\n");
                 shellOutputStream.flush();
+                // انتظر قليلاً للحصول على المخرجات
+                Thread.sleep(100);
             } catch (Exception e) {
-                appendColoredText("Command not found: " + command + "\n", COLOR_RED);
+                appendToTerminal("Command not found: " + command + "\n");
             }
         } else {
-            appendColoredText("Command not found: " + command + "\n", COLOR_RED);
+            appendToTerminal("Command not found: " + command + "\n");
         }
         
-        // تحديث شريط الحالة
-        updateStatusBar();
+        // عرض المؤشر مرة أخرى
+        appendToTerminal("$ - ");
     }
     
     private void executeLs() {
@@ -236,12 +213,12 @@ public class MainActivity extends Activity {
                         output.append("📄 ").append(f.getName()).append("\n");
                     }
                 }
-                appendColoredText(output.toString(), COLOR_WHITE);
+                appendToTerminal(output.toString());
             } else {
-                appendColoredText("Cannot read directory\n", COLOR_RED);
+                appendToTerminal("Cannot read directory\n");
             }
         } catch (Exception e) {
-            appendColoredText("Error: " + e.getMessage() + "\n", COLOR_RED);
+            appendToTerminal("Error: " + e.getMessage() + "\n");
         }
     }
     
@@ -259,27 +236,27 @@ public class MainActivity extends Activity {
         
         if (newDir != null && newDir.exists() && newDir.isDirectory()) {
             currentDirectory = newDir.getAbsolutePath();
-            appendColoredText("Changed to: " + currentDirectory + "\n", COLOR_CYAN);
+            appendToTerminal(currentDirectory + "\n");
         } else {
-            appendColoredText("Directory not found: " + path + "\n", COLOR_RED);
+            appendToTerminal("Directory not found: " + path + "\n");
         }
     }
     
     private void createDirectory(String path) {
         File dir = new File(currentDirectory, path);
         if (dir.mkdir()) {
-            appendColoredText("Directory created: " + path + "\n", COLOR_GREEN);
+            appendToTerminal("Created: " + path + "\n");
         } else {
-            appendColoredText("Failed to create directory\n", COLOR_RED);
+            appendToTerminal("Failed to create directory\n");
         }
     }
     
     private void removeFile(String path) {
         File file = new File(currentDirectory, path);
         if (file.delete()) {
-            appendColoredText("Deleted: " + path + "\n", COLOR_GREEN);
+            appendToTerminal("Deleted: " + path + "\n");
         } else {
-            appendColoredText("Failed to delete: " + path + "\n", COLOR_RED);
+            appendToTerminal("Failed to delete: " + path + "\n");
         }
     }
     
@@ -289,11 +266,11 @@ public class MainActivity extends Activity {
             BufferedReader reader = new BufferedReader(new InputStreamReader(new java.io.FileInputStream(file)));
             String line;
             while ((line = reader.readLine()) != null) {
-                appendColoredText(line + "\n", COLOR_WHITE);
+                appendToTerminal(line + "\n");
             }
             reader.close();
         } catch (Exception e) {
-            appendColoredText("Cannot read file: " + e.getMessage() + "\n", COLOR_RED);
+            appendToTerminal("Cannot read file: " + e.getMessage() + "\n");
         }
     }
     
@@ -301,57 +278,33 @@ public class MainActivity extends Activity {
         try {
             File file = new File(currentDirectory, path);
             if (file.createNewFile()) {
-                appendColoredText("File created: " + path + "\n", COLOR_GREEN);
+                appendToTerminal("Created: " + path + "\n");
             } else {
-                appendColoredText("File already exists\n", COLOR_YELLOW);
+                appendToTerminal("File already exists\n");
             }
         } catch (Exception e) {
-            appendColoredText("Failed to create file\n", COLOR_RED);
+            appendToTerminal("Failed to create file\n");
         }
     }
     
     private void showHelp() {
-        appendColoredText("\n═══════════════════════════════════════════\n", COLOR_CYAN);
-        appendColoredText("📖  الأوامر المتاحة:\n\n", COLOR_YELLOW);
-        appendColoredText("  📁  إدارة الملفات:\n", COLOR_GREEN);
-        appendColoredText("    ls              - عرض الملفات والمجلدات\n", COLOR_WHITE);
-        appendColoredText("    cd <path>       - تغيير المجلد\n", COLOR_WHITE);
-        appendColoredText("    pwd             - عرض المسار الحالي\n", COLOR_WHITE);
-        appendColoredText("    mkdir <name>    - إنشاء مجلد جديد\n", COLOR_WHITE);
-        appendColoredText("    remove <file>   - حذف ملف\n", COLOR_WHITE);
-        appendColoredText("    cat <file>      - عرض محتوى ملف\n", COLOR_WHITE);
-        appendColoredText("    touch <file>    - إنشاء ملف جديد\n\n", COLOR_WHITE);
-        
-        appendColoredText("  🔧  أوامر النظام:\n", COLOR_GREEN);
-        appendColoredText("    echo <text>     - طباعة نص\n", COLOR_WHITE);
-        appendColoredText("    clear           - مسح الشاشة\n", COLOR_WHITE);
-        appendColoredText("    history         - عرض تاريخ الأوامر\n", COLOR_WHITE);
-        appendColoredText("    whoami          - عرض اسم المستخدم\n", COLOR_WHITE);
-        appendColoredText("    date            - عرض التاريخ والوقت\n", COLOR_WHITE);
-        appendColoredText("    help            - عرض هذه المساعدة\n", COLOR_WHITE);
-        appendColoredText("    exit            - الخروج من التطبيق\n", COLOR_WHITE);
-        appendColoredText("═══════════════════════════════════════════\n\n", COLOR_CYAN);
+        appendToTerminal("\n=== Available Commands ===\n");
+        appendToTerminal("  help, clear, ls, cd, pwd\n");
+        appendToTerminal("  mkdir, rm, cat, echo\n");
+        appendToTerminal("  touch, history, whoami, date\n");
+        appendToTerminal("  exit\n");
+        appendToTerminal("==========================\n");
     }
     
     private void clearTerminal() {
         mainHandler.post(() -> terminalOutput.setText(""));
     }
     
-    private void appendColoredText(String text, int color) {
+    private void appendToTerminal(String text) {
         mainHandler.post(() -> {
-            SpannableStringBuilder builder = new SpannableStringBuilder(terminalOutput.getText());
-            int start = builder.length();
-            builder.append(text);
-            builder.setSpan(new ForegroundColorSpan(color), start, builder.length(), 0);
-            terminalOutput.setText(builder);
+            terminalOutput.append(text);
             scrollView.post(() -> scrollView.fullScroll(View.FOCUS_DOWN));
         });
-    }
-    
-    private void updateStatusBar() {
-        if (statusBar != null) {
-            statusBar.setText(" ⚡ Advanced Terminal v2.0 | " + currentDirectory);
-        }
     }
     
     @Override
