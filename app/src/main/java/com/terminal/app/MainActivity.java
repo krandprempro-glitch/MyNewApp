@@ -4,8 +4,6 @@ import android.app.Activity;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
-import android.text.Editable;
-import android.text.TextWatcher;
 import android.text.method.ScrollingMovementMethod;
 import android.view.KeyEvent;
 import android.view.MotionEvent;
@@ -43,7 +41,6 @@ public class MainActivity extends Activity {
     private static final int COLOR_WHITE = Color.parseColor("#FFFFFF");
     private static final int COLOR_GREEN = Color.parseColor("#00FF00");
     private static final int COLOR_RED = Color.parseColor("#FF0000");
-    private static final int COLOR_CYAN = Color.parseColor("#00FFFF");
     
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -58,7 +55,7 @@ public class MainActivity extends Activity {
         mainLayout.setBackgroundColor(Color.BLACK);
         mainLayout.setPadding(15, 30, 15, 15);
         
-        // منطقة عرض المخرجات (قابلة للتمرير)
+        // منطقة عرض المخرجات
         scrollView = new ScrollView(this);
         scrollView.setBackgroundColor(Color.BLACK);
         scrollView.setVerticalScrollBarEnabled(true);
@@ -73,12 +70,10 @@ public class MainActivity extends Activity {
         terminalOutput.setText("");
         terminalOutput.setFocusable(true);
         terminalOutput.setFocusableInTouchMode(true);
-        terminalOutput.setClickable(true);
         
-        // معالجة الكتابة مباشرة على TextView
+        // معالجة الكتابة
         terminalOutput.setOnKeyListener((v, keyCode, event) -> {
             if (event.getAction() == KeyEvent.ACTION_DOWN) {
-                char unicodeChar = event.getUnicodeChar();
                 if (keyCode == KeyEvent.KEYCODE_ENTER) {
                     executeCommand();
                     return true;
@@ -88,10 +83,14 @@ public class MainActivity extends Activity {
                         updateTerminalLine();
                     }
                     return true;
-                } else if (unicodeChar != 0 && waitingForCommand) {
-                    currentCommand.append((char) unicodeChar);
-                    updateTerminalLine();
-                    return true;
+                } else {
+                    // تحويل keyCode إلى حرف
+                    int unicode = event.getUnicodeChar();
+                    if (unicode != 0 && waitingForCommand) {
+                        currentCommand.append((char) unicode);
+                        updateTerminalLine();
+                        return true;
+                    }
                 }
             }
             return false;
@@ -112,7 +111,7 @@ public class MainActivity extends Activity {
         
         setContentView(mainLayout);
         
-        // عرض المؤشر الأولي
+        // عرض المؤشر
         appendToTerminal(isRoot ? "# " : "$ ");
         
         // فتح لوحة المفاتيح
@@ -181,14 +180,14 @@ public class MainActivity extends Activity {
             return;
         }
         
-        // حذف المؤقت من السطر الحالي وإضافة الأمر
+        // حذف المؤقت من السطر الحالي
         String text = terminalOutput.getText().toString();
         String newText = text.substring(0, text.length() - 2) + command + "\n";
         terminalOutput.setText(newText);
         
         waitingForCommand = false;
         
-        // معالجة الأوامر المدمجة
+        // معالجة الأوامر
         if (command.equals("clear")) {
             clearTerminal();
         } else if (command.equals("help")) {
@@ -203,7 +202,7 @@ public class MainActivity extends Activity {
             appendToTerminal(command.substring(5) + "\n");
         } else if (command.equals("su")) {
             executeSu();
-        } else if (command.equals("exit") || command.equals("logout")) {
+        } else if (command.equals("exit")) {
             if (isRoot) {
                 isRoot = false;
                 appendToTerminal("Exit root\n");
@@ -315,18 +314,16 @@ public class MainActivity extends Activity {
     }
     
     private void showHelp() {
-        appendToTerminal("\n╔═══════════════════════════════════════════╗\n");
-        appendToTerminal("║     Advanced Terminal Emulator            ║\n");
-        appendToTerminal("╠═══════════════════════════════════════════╣\n");
-        appendToTerminal("║  help  - Show this help                   ║\n");
-        appendToTerminal("║  clear - Clear screen                     ║\n");
-        appendToTerminal("║  ls    - List files                       ║\n");
-        appendToTerminal("║  cd    - Change directory                 ║\n");
-        appendToTerminal("║  pwd   - Show current path                ║\n");
-        appendToTerminal("║  echo  - Print text                       ║\n");
-        appendToTerminal("║  su    - Switch to root                   ║\n");
-        appendToTerminal("║  exit  - Close app                        ║\n");
-        appendToTerminal("╚═══════════════════════════════════════════╝\n");
+        appendToTerminal("\n=== Available Commands ===\n");
+        appendToTerminal("  help  - Show this help\n");
+        appendToTerminal("  clear - Clear screen\n");
+        appendToTerminal("  ls    - List files\n");
+        appendToTerminal("  cd    - Change directory\n");
+        appendToTerminal("  pwd   - Show current path\n");
+        appendToTerminal("  echo  - Print text\n");
+        appendToTerminal("  su    - Switch to root\n");
+        appendToTerminal("  exit  - Close app\n");
+        appendToTerminal("==========================\n");
     }
     
     private void clearTerminal() {
