@@ -1,11 +1,12 @@
 package com.terminal.app;
 
 import android.app.Activity;
+import android.content.ClipData;
+import android.content.ClipboardManager;
+import android.content.Context;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
-import android.text.ClipboardManager;
-import android.text.TextUtils;
 import android.text.method.ScrollingMovementMethod;
 import android.view.KeyEvent;
 import android.view.MotionEvent;
@@ -17,7 +18,6 @@ import android.widget.TextView;
 import android.widget.Toast;
 import android.graphics.Color;
 import android.graphics.Typeface;
-import android.content.Context;
 
 import java.io.BufferedReader;
 import java.io.DataOutputStream;
@@ -141,22 +141,34 @@ public class MainActivity extends Activity {
     }
     
     private void pasteFromClipboard() {
-        if (clipboard.hasPrimaryClip()) {
-            String pastedText = clipboard.getPrimaryClip().getItemAt(0).getText().toString();
-            if (pastedText != null && !pastedText.isEmpty()) {
-                // إزالة الأسطر الجديدة واستبدالها بمسافات
-                pastedText = pastedText.replace("\n", " ").replace("\r", "");
-                currentCommand.append(pastedText);
-                updateTerminalLine();
-                Toast.makeText(this, "Pasted: " + pastedText, Toast.LENGTH_SHORT).show();
+        try {
+            if (clipboard != null && clipboard.hasPrimaryClip()) {
+                ClipData clip = clipboard.getPrimaryClip();
+                if (clip != null && clip.getItemCount() > 0) {
+                    CharSequence pastedText = clip.getItemAt(0).getText();
+                    if (pastedText != null && pastedText.length() > 0) {
+                        String text = pastedText.toString();
+                        // إزالة الأسطر الجديدة واستبدالها بمسافات
+                        text = text.replace("\n", " ").replace("\r", "");
+                        currentCommand.append(text);
+                        updateTerminalLine();
+                        Toast.makeText(this, "Pasted: " + text, Toast.LENGTH_SHORT).show();
+                    }
+                }
             }
+        } catch (Exception e) {
+            Toast.makeText(this, "Failed to paste", Toast.LENGTH_SHORT).show();
         }
     }
     
     private void copyToClipboard(String text) {
-        android.content.ClipData clip = android.content.ClipData.newPlainText("Terminal", text);
-        clipboard.setPrimaryClip(clip);
-        Toast.makeText(this, "Copied to clipboard", Toast.LENGTH_SHORT).show();
+        try {
+            ClipData clip = ClipData.newPlainText("Terminal", text);
+            clipboard.setPrimaryClip(clip);
+            Toast.makeText(this, "Copied to clipboard", Toast.LENGTH_SHORT).show();
+        } catch (Exception e) {
+            Toast.makeText(this, "Failed to copy", Toast.LENGTH_SHORT).show();
+        }
     }
     
     private void updatePrompt() {
