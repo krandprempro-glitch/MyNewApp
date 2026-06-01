@@ -34,12 +34,10 @@ public class MainActivity extends Activity {
     private BufferedReader shellReader;
     private String currentDirectory = "/";
     private StringBuilder currentHistory = new StringBuilder();
+    private StringBuilder currentLine = new StringBuilder();
     
-    // الألوان
     private static final int COLOR_WHITE = Color.parseColor("#FFFFFF");
     private static final int COLOR_GREEN = Color.parseColor("#00FF00");
-    private static final int COLOR_RED = Color.parseColor("#FF0000");
-    private static final int COLOR_YELLOW = Color.parseColor("#FFFF00");
     
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -66,20 +64,9 @@ public class MainActivity extends Activity {
         terminalOutput.setMovementMethod(new ScrollingMovementMethod());
         terminalOutput.setPadding(10, 10, 10, 10);
         terminalOutput.setTextIsSelectable(true);
-        terminalOutput.setText("");
+        terminalOutput.setText("$ - ");
         
-        // سطر الإدخال
-        LinearLayout inputLayout = new LinearLayout(this);
-        inputLayout.setOrientation(LinearLayout.HORIZONTAL);
-        inputLayout.setBackgroundColor(Color.BLACK);
-        inputLayout.setPadding(5, 10, 5, 10);
-        
-        TextView prompt = new TextView(this);
-        prompt.setText("$ - ");
-        prompt.setTextColor(COLOR_GREEN);
-        prompt.setTextSize(14);
-        prompt.setTypeface(Typeface.MONOSPACE);
-        
+        // سطر الإدخال (مخفي، فقط لالتقاط الأوامر)
         commandInput = new EditText(this);
         commandInput.setBackgroundColor(Color.TRANSPARENT);
         commandInput.setTextColor(COLOR_WHITE);
@@ -87,6 +74,7 @@ public class MainActivity extends Activity {
         commandInput.setTypeface(Typeface.MONOSPACE);
         commandInput.setHint("");
         commandInput.setSingleLine(true);
+        commandInput.setVisibility(View.GONE); // إخفاء حقل الإدخال
         
         commandInput.setOnEditorActionListener((v, actionId, event) -> {
             if (actionId == EditorInfo.IME_ACTION_DONE || 
@@ -98,12 +86,9 @@ public class MainActivity extends Activity {
             return false;
         });
         
-        inputLayout.addView(prompt);
-        inputLayout.addView(commandInput, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1));
-        
         mainLayout.addView(scrollView, new LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.MATCH_PARENT, 0, 1));
-        mainLayout.addView(inputLayout);
+        mainLayout.addView(commandInput);
         
         scrollView.addView(terminalOutput);
         
@@ -112,8 +97,8 @@ public class MainActivity extends Activity {
         // بدء Shell
         startShell();
         
-        // عرض المؤشر فقط
-        appendToTerminal("$ - ");
+        // طلب التركيز على الإدخال
+        commandInput.requestFocus();
     }
     
     private void startShell() {
@@ -127,14 +112,21 @@ public class MainActivity extends Activity {
                     String line;
                     while ((line = shellReader.readLine()) != null) {
                         final String output = line;
-                        mainHandler.post(() -> appendToTerminal(output + "\n"));
+                        mainHandler.post(() -> {
+                            appendToTerminal(output + "\n");
+                            appendToTerminal("$ - ");
+                        });
                     }
                 } catch (Exception e) {
-                    mainHandler.post(() -> appendToTerminal("Shell error: " + e.getMessage() + "\n"));
+                    mainHandler.post(() -> {
+                        appendToTerminal("Shell error: " + e.getMessage() + "\n");
+                        appendToTerminal("$ - ");
+                    });
                 }
             });
         } catch (Exception e) {
             appendToTerminal("Cannot start system shell.\n");
+            appendToTerminal("$ - ");
         }
     }
     
@@ -142,15 +134,21 @@ public class MainActivity extends Activity {
         String command = commandInput.getText().toString().trim();
         if (command.isEmpty()) {
             commandInput.setText("");
-            appendToTerminal("$ - ");
             return;
         }
         
+        // إزالة "$ - " من السطر الحالي
+        String currentText = terminalOutput.getText().toString();
+        if (currentText.endsWith("$ - ")) {
+            currentText = currentText.substring(0, currentText.length() - 4);
+            terminalOutput.setText(currentText);
+        }
+        
+        // عرض الأمر بجانب $
+        appendToTerminal(command + "\n");
+        
         // حفظ في التاريخ
         currentHistory.append(command).append("\n");
-        
-        // عرض الأمر الذي تم إدخاله
-        appendToTerminal(command + "\n");
         commandInput.setText("");
         
         // معالجة الأوامر المدمجة
@@ -187,8 +185,6 @@ public class MainActivity extends Activity {
             try {
                 shellOutputStream.writeBytes(command + "\n");
                 shellOutputStream.flush();
-                // انتظر قليلاً للحصول على المخرجات
-                Thread.sleep(100);
             } catch (Exception e) {
                 appendToTerminal("Command not found: " + command + "\n");
             }
@@ -236,7 +232,6 @@ public class MainActivity extends Activity {
         
         if (newDir != null && newDir.exists() && newDir.isDirectory()) {
             currentDirectory = newDir.getAbsolutePath();
-            appendToTerminal(currentDirectory + "\n");
         } else {
             appendToTerminal("Directory not found: " + path + "\n");
         }
