@@ -14,12 +14,8 @@ import android.widget.EditText;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
-import android.widget.Toast;
 import android.graphics.Color;
 import android.graphics.Typeface;
-import android.content.ClipboardManager;
-import android.content.Context;
-import android.view.MotionEvent;
 
 import java.io.BufferedReader;
 import java.io.DataOutputStream;
@@ -40,6 +36,7 @@ public class MainActivity extends Activity {
     private BufferedReader shellReader;
     private String currentDirectory = "/data/data/com.termux/files/home";
     private StringBuilder currentHistory = new StringBuilder();
+    private TextView statusBar;
     
     // الألوان
     private static final int COLOR_GREEN = Color.parseColor("#00FF00");
@@ -62,7 +59,7 @@ public class MainActivity extends Activity {
         mainLayout.setPadding(20, 30, 20, 20);
         
         // شريط الحالة
-        TextView statusBar = new TextView(this);
+        statusBar = new TextView(this);
         statusBar.setText(" ⚡ Advanced Terminal v2.0 | " + currentDirectory);
         statusBar.setTextColor(COLOR_CYAN);
         statusBar.setBackgroundColor(Color.parseColor("#1A1A1A"));
@@ -140,7 +137,7 @@ public class MainActivity extends Activity {
         appendColoredText("╠═══════════════════════════════════════════╣\n", COLOR_CYAN);
         appendColoredText("║  الأوامر المتاحة:                         ║\n", COLOR_GREEN);
         appendColoredText("║  • help, clear, ls, cd, pwd               ║\n", COLOR_WHITE);
-        appendColoredText("║  • mkdir, rm, cat, echo                   ║\n", COLOR_WHITE);
+        appendColoredText("║  • mkdir, remove, cat, echo               ║\n", COLOR_WHITE);
         appendColoredText("║  • exit, history                          ║\n", COLOR_WHITE);
         appendColoredText("╚═══════════════════════════════════════════╝\n\n", COLOR_CYAN);
     }
@@ -201,8 +198,8 @@ public class MainActivity extends Activity {
             appendColoredText(msg + "\n", COLOR_WHITE);
         } else if (command.startsWith("mkdir ")) {
             createDirectory(command.substring(6));
-        } else if (command.startsWith("rm ")) {
-            deleteFile(command.substring(3));
+        } else if (command.startsWith("remove ")) {
+            removeFile(command.substring(7));
         } else if (command.startsWith("cat ")) {
             readFile(command.substring(4));
         } else if (command.equals("whoami")) {
@@ -277,7 +274,7 @@ public class MainActivity extends Activity {
         }
     }
     
-    private void deleteFile(String path) {
+    private void removeFile(String path) {
         File file = new File(currentDirectory, path);
         if (file.delete()) {
             appendColoredText("Deleted: " + path + "\n", COLOR_GREEN);
@@ -321,7 +318,7 @@ public class MainActivity extends Activity {
         appendColoredText("    cd <path>       - تغيير المجلد\n", COLOR_WHITE);
         appendColoredText("    pwd             - عرض المسار الحالي\n", COLOR_WHITE);
         appendColoredText("    mkdir <name>    - إنشاء مجلد جديد\n", COLOR_WHITE);
-        appendColoredText("    rm <file>       - حذف ملف\n", COLOR_WHITE);
+        appendColoredText("    remove <file>   - حذف ملف\n", COLOR_WHITE);
         appendColoredText("    cat <file>      - عرض محتوى ملف\n", COLOR_WHITE);
         appendColoredText("    touch <file>    - إنشاء ملف جديد\n\n", COLOR_WHITE);
         
@@ -352,9 +349,8 @@ public class MainActivity extends Activity {
     }
     
     private void updateStatusBar() {
-        View statusBar = ((LinearLayout) findViewById(android.R.id.content).getRootView().getChildAt(0)).getChildAt(0);
-        if (statusBar instanceof TextView) {
-            ((TextView) statusBar).setText(" ⚡ Advanced Terminal v2.0 | " + currentDirectory);
+        if (statusBar != null) {
+            statusBar.setText(" ⚡ Advanced Terminal v2.0 | " + currentDirectory);
         }
     }
     
