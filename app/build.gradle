@@ -1,0 +1,30 @@
+plugins {
+    id 'com.android.application'
+}
+
+android {
+    namespace 'com.terminal.app'
+    compileSdk 34
+
+    defaultConfig {
+        applicationId "com.terminal.app"
+        minSdk 21
+        targetSdk 34
+        versionCode 1
+        versionName "2.0"
+    }
+
+    buildTypes {
+        debug {
+            debuggable true
+        }
+        release {
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt')
+        }
+    }
+}
+
+dependencies {
+    // No additional dependencies needed
+}
